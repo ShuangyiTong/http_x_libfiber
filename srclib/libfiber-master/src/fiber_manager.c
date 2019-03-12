@@ -16,7 +16,7 @@
 
 #include "fiber_manager.h"
 #include "fiber_event.h"
-#include "fiber_io.h"
+// #include "fiber_io.h"
 #include "mpmc_lifo.h"
 #include <stdlib.h>
 #include <errno.h>
@@ -274,9 +274,9 @@ int fiber_manager_init(size_t num_threads)
 
     pthread_attr_destroy(&attr);
 
-    if(!fiber_io_init()) {
-        return FIBER_ERROR;
-    }
+    // if(!fiber_io_init()) {
+    //     return FIBER_ERROR;
+    // }
     if(!fiber_event_init()) {
         return FIBER_ERROR;
     }

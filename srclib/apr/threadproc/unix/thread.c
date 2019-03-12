@@ -17,6 +17,7 @@
 #include "apr.h"
 #include "apr_portable.h"
 #include "apr_arch_threadproc.h"
+#include "../libfiber/fiber_manager.h"
 
 #if APR_HAS_THREADS
 

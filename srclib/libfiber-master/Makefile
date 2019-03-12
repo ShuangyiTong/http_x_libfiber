@@ -12,7 +12,6 @@ CFILES = \
     fiber_cond.c \
     fiber.c \
     fiber_barrier.c \
-    fiber_io.c \
     fiber_rwlock.c \
     hazard_pointer.c \
     work_stealing_deque.c \
