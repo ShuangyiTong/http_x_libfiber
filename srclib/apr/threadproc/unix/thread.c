@@ -45,6 +45,9 @@ APR_DECLARE(apr_status_t) apr_threadattr_create(apr_threadattr_t **new,
 
     (*new) = apr_palloc(pool, sizeof(apr_threadattr_t));
     (*new)->pool = pool;
+#ifdef FIBER_THREAD
+    stat = 0; // success, no attr for fiber
+#else
     stat = pthread_attr_init(&(*new)->attr);
 
     if (stat == 0) {
@@ -52,10 +55,11 @@ APR_DECLARE(apr_status_t) apr_threadattr_create(apr_threadattr_t **new,
                                   apr_pool_cleanup_null);
         return APR_SUCCESS;
     }
-#ifdef HAVE_ZOS_PTHREADS
-    stat = errno;
-#endif
+    #ifdef HAVE_ZOS_PTHREADS
+        stat = errno;
+    #endif
 
+#endif
     return stat;
 }
 
@@ -69,23 +73,30 @@ APR_DECLARE(apr_status_t) apr_threadattr_detach_set(apr_threadattr_t *attr,
                                                     apr_int32_t on)
 {
     apr_status_t stat;
-#ifdef HAVE_ZOS_PTHREADS
-    int arg = DETACH_ARG(on);
 
-    if ((stat = pthread_attr_setdetachstate(&attr->attr, &arg)) == 0) {
+#ifdef FIBER_THREAD
+    attr->detached = on;
+    stat = 0;
+    return stat;
 #else
-    if ((stat = pthread_attr_setdetachstate(&attr->attr, 
-                                            DETACH_ARG(on))) == 0) {
-#endif
-        return APR_SUCCESS;
-    }
-    else {
-#ifdef HAVE_ZOS_PTHREADS
-        stat = errno;
-#endif
+    #ifdef HAVE_ZOS_PTHREADS
+        int arg = DETACH_ARG(on);
 
-        return stat;
-    }
+        if ((stat = pthread_attr_setdetachstate(&attr->attr, &arg)) == 0) {
+    #else
+        if ((stat = pthread_attr_setdetachstate(&attr->attr, 
+                                                DETACH_ARG(on))) == 0) {
+    #endif
+            return APR_SUCCESS;
+        }
+        else {
+    #ifdef HAVE_ZOS_PTHREADS
+            stat = errno;
+    #endif
+
+            return stat;
+        }
+#endif
 }
 
 APR_DECLARE(apr_status_t) apr_threadattr_detach_get(apr_threadattr_t *attr)
@@ -107,14 +118,20 @@ APR_DECLARE(apr_status_t) apr_threadattr_stacksize_set(apr_threadattr_t *attr,
 {
     int stat;
 
+#ifdef FIBER_THREAD
+    attr->stacksize = stacksize;
+    stat = 0;
+#else
     stat = pthread_attr_setstacksize(&attr->attr, stacksize);
     if (stat == 0) {
         return APR_SUCCESS;
     }
-#ifdef HAVE_ZOS_PTHREADS
-    stat = errno;
-#endif
 
+    #ifdef HAVE_ZOS_PTHREADS
+        stat = errno;
+    #endif
+
+#endif
     return stat;
 }
 
@@ -177,16 +194,27 @@ APR_DECLARE(apr_status_t) apr_thread_create(apr_thread_t **new,
         return stat;
     }
 
-    if ((stat = pthread_create((*new)->td, temp, dummy_worker, (*new))) == 0) {
-        return APR_SUCCESS;
+#ifdef FIBER_THREAD
+    fiber_t* new_fiber = fiber_create(attr->stacksize, dummy_worker, (*new));
+    if (new_fiber) {
+        (*new)->td = (pthread_t)(new_fiber); // remember this reference to control the fiber
     }
-    else {
-#ifdef HAVE_ZOS_PTHREADS
-        stat = errno;
-#endif
+    if (attr->detached) {
+        fiber_detach(new_fiber); // manually detach fiber
+    }
 
-        return stat;
-    }
+#else
+        if ((stat = pthread_create((*new)->td, temp, dummy_worker, (*new))) == 0) {
+            return APR_SUCCESS;
+        }
+        else {
+    #ifdef HAVE_ZOS_PTHREADS
+            stat = errno;
+    #endif
+
+            return stat;
+        }
+#endif
 }
 
 APR_DECLARE(apr_os_thread_t) apr_os_thread_current(void)
@@ -205,7 +233,10 @@ APR_DECLARE(apr_status_t) apr_thread_exit(apr_thread_t *thd,
 {
     thd->exitval = retval;
     apr_pool_destroy(thd->pool);
+#ifdef FIBER_THREAD
+#else
     pthread_exit(NULL);
+#endif
     return APR_SUCCESS;
 }
 
@@ -215,17 +246,22 @@ APR_DECLARE(apr_status_t) apr_thread_join(apr_status_t *retval,
     apr_status_t stat;
     apr_status_t *thread_stat;
 
-    if ((stat = pthread_join(*thd->td,(void *)&thread_stat)) == 0) {
-        *retval = thd->exitval;
-        return APR_SUCCESS;
-    }
-    else {
-#ifdef HAVE_ZOS_PTHREADS
-        stat = errno;
-#endif
+#ifdef FIBER_THREAD
+    stat = fiber_join((fiber_t*)(*thd->td),(void *)&thread_stat);
+    return stat;
+#else
+        if ((stat = pthread_join(*thd->td,(void *)&thread_stat)) == 0) {
+            *retval = thd->exitval;
+            return APR_SUCCESS;
+        }
+        else {
+    #ifdef HAVE_ZOS_PTHREADS
+            stat = errno;
+    #endif
 
-        return stat;
-    }
+            return stat;
+        }
+#endif
 }
 
 APR_DECLARE(apr_status_t) apr_thread_detach(apr_thread_t *thd)
