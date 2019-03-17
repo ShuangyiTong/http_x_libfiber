@@ -17,7 +17,9 @@
 #include "apr.h"
 #include "apr_portable.h"
 #include "apr_arch_threadproc.h"
-#include "../libfiber/fiber_manager.h"
+#ifdef FIBER_THREAD
+    #include "../libfiber/fiber_manager.h"
+#endif
 
 #if APR_HAS_THREADS
 
@@ -46,7 +48,7 @@ APR_DECLARE(apr_status_t) apr_threadattr_create(apr_threadattr_t **new,
     (*new) = apr_palloc(pool, sizeof(apr_threadattr_t));
     (*new)->pool = pool;
 #ifdef FIBER_THREAD
-    stat = 0; // success, no attr for fiber
+    return APR_SUCCESS; // success, no attr for fiber
 #else
     stat = pthread_attr_init(&(*new)->attr);
 
@@ -76,8 +78,7 @@ APR_DECLARE(apr_status_t) apr_threadattr_detach_set(apr_threadattr_t *attr,
 
 #ifdef FIBER_THREAD
     attr->detached = on;
-    stat = 0;
-    return stat;
+    return APR_SUCCESS;
 #else
     #ifdef HAVE_ZOS_PTHREADS
         int arg = DETACH_ARG(on);
@@ -120,7 +121,7 @@ APR_DECLARE(apr_status_t) apr_threadattr_stacksize_set(apr_threadattr_t *attr,
 
 #ifdef FIBER_THREAD
     attr->stacksize = stacksize;
-    stat = 0;
+    return APR_SUCCESS;
 #else
     stat = pthread_attr_setstacksize(&attr->attr, stacksize);
     if (stat == 0) {
@@ -199,10 +200,13 @@ APR_DECLARE(apr_status_t) apr_thread_create(apr_thread_t **new,
     if (new_fiber) {
         (*new)->td = (pthread_t)(new_fiber); // remember this reference to control the fiber
     }
+    else {
+        return 1; // ERROR
+    }
     if (attr->detached) {
         fiber_detach(new_fiber); // manually detach fiber
     }
-
+    return APR_SUCCESS;
 #else
         if ((stat = pthread_create((*new)->td, temp, dummy_worker, (*new))) == 0) {
             return APR_SUCCESS;
@@ -234,6 +238,7 @@ APR_DECLARE(apr_status_t) apr_thread_exit(apr_thread_t *thd,
     thd->exitval = retval;
     apr_pool_destroy(thd->pool);
 #ifdef FIBER_THREAD
+    // do nothing
 #else
     pthread_exit(NULL);
 #endif
@@ -248,7 +253,7 @@ APR_DECLARE(apr_status_t) apr_thread_join(apr_status_t *retval,
 
 #ifdef FIBER_THREAD
     stat = fiber_join((fiber_t*)(*thd->td),(void *)&thread_stat);
-    return stat;
+    return (stat == FIBER_SUCCESS ? APR_SUCCESS : stat); // convert fiber success code to apr success code
 #else
         if ((stat = pthread_join(*thd->td,(void *)&thread_stat)) == 0) {
             *retval = thd->exitval;

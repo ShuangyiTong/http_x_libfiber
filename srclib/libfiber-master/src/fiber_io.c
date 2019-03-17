@@ -190,12 +190,10 @@ int fiber_io_init()
     }
 
     struct rlimit file_lim;
-    int ret = getrlimit(RLIMIT_NOFILE, &file_lim);
-    max_fd = file_lim.rlim_max;
-    fprintf(stderr, "fiber_io_init(): ret: %d, RLIMIT_NOFILE: %ld\n", ret, max_fd);
-    if(ret) {
+    if(getrlimit(RLIMIT_NOFILE, &file_lim)) {
         return FIBER_ERROR;
     }
+    max_fd = file_lim.rlim_max;
 
     fd_info = calloc(max_fd, sizeof(*fd_info));
     if(!fd_info) {
@@ -234,7 +232,6 @@ static int setup_socket(int sock)
         return 0;
     }
 
-    fprintf(stderr, "setup_socket(int sock): sock: %d, max_fd: %ld\n", sock, max_fd);
     assert(sock < max_fd);
     __sync_fetch_and_or(&fd_info[sock].flags_, IO_FLAG_BLOCKING | IO_FLAG_WAITABLE);
     assert(fd_info[sock].flags_ & IO_FLAG_BLOCKING);

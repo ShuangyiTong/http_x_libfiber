@@ -68,7 +68,10 @@
 #include "mpm_default.h"
 #include "util_mutex.h"
 #include "unixd.h"
-#include "libfiber/fiber_manager.h"
+
+#ifdef FIBER_THREAD
+    #include "libfiber/fiber_manager.h"
+#endif
 
 #include <signal.h>
 #include <limits.h>             /* for INT_MAX */
@@ -1104,9 +1107,14 @@ static void child_main(int child_num_arg, int child_bucket)
     ap_my_pid = getpid();
     ap_fatal_signal_child_setup(ap_server_conf);
 
+#ifdef FIBER_THREAD
     // Setup fiber manager for this process
-    fiber_manager_init(8);
-    fprintf(stderr, "called");
+    #ifdef FIBER_WORKER
+        fiber_manager_init(FIBER_WORKER);
+    #else
+        fiber_manager_init(32);
+    #endif
+#endif
 
     /* Get a sub context for global allocations in this child, so that
      * we can have cleanups occur when the child exits.

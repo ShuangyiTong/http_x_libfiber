@@ -1,3 +1,6 @@
+# Modified version of Apache HTTP Server
+* Configure httpd.conf.
+* Run ./build-many.sh to build our modified apache and original apache
 
                           Apache HTTP Server
 
