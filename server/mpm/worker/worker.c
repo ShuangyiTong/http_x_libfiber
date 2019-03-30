@@ -106,7 +106,7 @@
  * the overhead.
  */
 #ifndef DEFAULT_THREAD_LIMIT
-#define DEFAULT_THREAD_LIMIT 64
+    #define DEFAULT_THREAD_LIMIT 64
 #endif
 
 /* Admin can't tune ThreadLimit beyond MAX_THREAD_LIMIT.  We want
