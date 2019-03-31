@@ -18,19 +18,28 @@
 #define APR_WANT_MEMFUNC
 #include "apr_want.h"
 
+#ifdef FIBER_THREAD
+    #include "../libfiber/fiber_manager.h"
+#endif
+
 #if APR_HAS_THREADS
 
 static apr_status_t thread_mutex_cleanup(void *data)
 {
     apr_thread_mutex_t *mutex = data;
     apr_status_t rv;
-
+#ifdef FIBER_THREAD
+    rv = (fiber_mutex_destroy((fiber_mutex_t*)&mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     rv = pthread_mutex_destroy(&mutex->mutex);
+#endif
+
 #ifdef HAVE_ZOS_PTHREADS
     if (rv) {
         rv = errno;
     }
 #endif
+
     return rv;
 } 
 
@@ -50,25 +59,29 @@ APR_DECLARE(apr_status_t) apr_thread_mutex_create(apr_thread_mutex_t **mutex,
     new_mutex = apr_pcalloc(pool, sizeof(apr_thread_mutex_t));
     new_mutex->pool = pool;
 
-#ifdef HAVE_PTHREAD_MUTEX_RECURSIVE
-    if (flags & APR_THREAD_MUTEX_NESTED) {
-        pthread_mutexattr_t mattr;
-        
-        rv = pthread_mutexattr_init(&mattr);
-        if (rv) return rv;
-        
-        rv = pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
-        if (rv) {
+#ifdef FIBER_THREAD
+    rv = (fiber_mutex_init((fiber_mutex_t*)&new_mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
+    #ifdef HAVE_PTHREAD_MUTEX_RECURSIVE
+        if (flags & APR_THREAD_MUTEX_NESTED) {
+            pthread_mutexattr_t mattr;
+            
+            rv = pthread_mutexattr_init(&mattr);
+            if (rv) return rv;
+            
+            rv = pthread_mutexattr_settype(&mattr, PTHREAD_MUTEX_RECURSIVE);
+            if (rv) {
+                pthread_mutexattr_destroy(&mattr);
+                return rv;
+            }
+            
+            rv = pthread_mutex_init(&new_mutex->mutex, &mattr);
+            
             pthread_mutexattr_destroy(&mattr);
-            return rv;
-        }
-         
-        rv = pthread_mutex_init(&new_mutex->mutex, &mattr);
-        
-        pthread_mutexattr_destroy(&mattr);
-    } else
-#endif
+        } else
+    #endif
         rv = pthread_mutex_init(&new_mutex->mutex, NULL);
+#endif
 
     if (rv) {
 #ifdef HAVE_ZOS_PTHREADS
@@ -88,22 +101,31 @@ APR_DECLARE(apr_status_t) apr_thread_mutex_create(apr_thread_mutex_t **mutex,
 APR_DECLARE(apr_status_t) apr_thread_mutex_lock(apr_thread_mutex_t *mutex)
 {
     apr_status_t rv;
-
+    
+#ifdef FIBER_THREAD
+    rv = (fiber_mutex_lock((fiber_mutex_t*)&mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     rv = pthread_mutex_lock(&mutex->mutex);
+#endif
+
 #ifdef HAVE_ZOS_PTHREADS
     if (rv) {
         rv = errno;
     }
 #endif
-    
+        
     return rv;
 }
 
 APR_DECLARE(apr_status_t) apr_thread_mutex_trylock(apr_thread_mutex_t *mutex)
 {
     apr_status_t rv;
-
+#ifdef FIBER_THREAD
+    rv = (fiber_mutex_trylock((fiber_mutex_t*)&mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     rv = pthread_mutex_trylock(&mutex->mutex);
+#endif
+
     if (rv) {
 #ifdef HAVE_ZOS_PTHREADS
         rv = errno;
@@ -117,8 +139,12 @@ APR_DECLARE(apr_status_t) apr_thread_mutex_trylock(apr_thread_mutex_t *mutex)
 APR_DECLARE(apr_status_t) apr_thread_mutex_unlock(apr_thread_mutex_t *mutex)
 {
     apr_status_t status;
-
+#ifdef FIBER_THREAD
+    status = (fiber_mutex_unlock((fiber_mutex_t*)&mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     status = pthread_mutex_unlock(&mutex->mutex);
+#endif
+
 #ifdef HAVE_ZOS_PTHREADS
     if (status) {
         status = errno;
