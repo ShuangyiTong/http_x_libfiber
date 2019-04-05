@@ -465,6 +465,14 @@ static void usage(process_rec *process)
 
 int main(int argc, const char * const argv[])
 {
+#ifdef FIBER_THREAD
+    // Setup fiber manager for this process
+    #ifdef FIBER_WORKER
+        fiber_manager_init(FIBER_WORKER);
+    #else
+        fiber_manager_init(32);
+    #endif
+#endif
     char c;
     int showcompile = 0, showdirectives = 0;
     const char *confname = SERVER_CONFIG_FILE;

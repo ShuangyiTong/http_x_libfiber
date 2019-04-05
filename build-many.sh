@@ -3,12 +3,14 @@ OPTIND=1         # Reset in case getopts has been used previously in the shell.
 
 # Initialize our own variables:
 modules="prefork worker event"
-server_addr=192.168.2.152:80
+server_addr=192.168.2.152
+port=80
 fiber_only=false
 thread_only=false
 conf_only=false
+build_only=false
 
-while getopts "m:s:ftc" opt; do
+while getopts "m:s:p:ftcb" opt; do
     case "$opt" in
     m)  modules=$OPTARG
         ;;
@@ -18,16 +20,22 @@ while getopts "m:s:ftc" opt; do
         ;;
     c)  conf_only=true
         ;;
+    b)  build_only=true
+        ;;
     s)  server_addr=$OPTARG
+        ;;
+    p)  port=$OPTARG
         ;;
     esac
 done
 
-RUNNING_CONFIG="MPMs: $modules\n\
-                Fiber Only: $fiber_only\n\
-                Thread Only: $thread_only\n\
-                Server Address: $server_addr\n\
-                Export Configuration File Only: $conf_only\n"
+RUNNING_CONFIG="\
+MPMs: $modules\n\
+Fiber Only: $fiber_only\n\
+Thread Only: $thread_only\n\
+Build Only: $build_only\n\
+Server Address: $server_addr\n\
+Export Configuration File Only: $conf_only\n"
 
 echo "$RUNNING_CONFIG"
 
@@ -36,25 +44,31 @@ do
     if [ "$thread_only" = false ] ; then
         if [ "$conf_only" = false ] ; then
             # build fiber based apache
-            make clean
-            ./fiber-conf.sh --with-mpm=$mpm_name --prefix=/httpd/apache-fiber-$mpm_name/
+            if [ "$build_only" = false ] ; then
+                make clean
+                ./fiber-conf.sh --with-mpm=$mpm_name --prefix=/httpd/apache-fiber-$mpm_name/
+            fi
             ./install-all.sh
         fi
         cp ./httpd-fiber.conf /httpd/apache-fiber-$mpm_name/conf/httpd.conf
         sed -i -e "s/ServerName UNDEFINED/ServerName $server_addr/g" /httpd/apache-fiber-$mpm_name/conf/httpd.conf
+        sed -i -e "s/Listen UNDEFINED/Listen $port/g" /httpd/apache-fiber-$mpm_name/conf/httpd.conf
         sed -i -e "s/ServerRoot UNDEFINED/ServerRoot \/httpd\/apache-fiber-$mpm_name\//g" /httpd/apache-fiber-$mpm_name/conf/httpd.conf
     fi
 
     # build original apache
     if [ "$fiber_only" = false ] ; then
         if [ "$conf_only" = false ] ; then
-            make clean
-            ./configure --with-included-apr --with-mpm=$mpm_name --prefix=/httpd/apache-thread-$mpm_name/
+            if [ "$build_only" = false ] ; then
+                make clean
+                ./configure --with-included-apr --with-mpm=$mpm_name --prefix=/httpd/apache-thread-$mpm_name/
+            fi
             make
             make install
         fi
         cp ./httpd-thread.conf /httpd/apache-thread-$mpm_name/conf/httpd.conf
         sed -i -e "s/ServerName UNDEFINED/ServerName $server_addr/g" /httpd/apache-thread-$mpm_name/conf/httpd.conf
+        sed -i -e "s/Listen UNDEFINED/Listen $port/g" /httpd/apache-thread-$mpm_name/conf/httpd.conf
         sed -i -e "s/ServerRoot UNDEFINED/ServerRoot \/httpd\/apache-thread-$mpm_name\//g" /httpd/apache-thread-$mpm_name/conf/httpd.conf
     fi
 done
