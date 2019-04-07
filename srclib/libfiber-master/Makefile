@@ -10,6 +10,7 @@ CFILES = \
     fiber_semaphore.c \
     fiber_spinlock.c \
     fiber_cond.c \
+    fiber_io.c\
     fiber.c \
     fiber_barrier.c \
     fiber_rwlock.c \

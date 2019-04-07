@@ -21,16 +21,24 @@
 #include "apr_arch_thread_mutex.h"
 #include "apr_arch_thread_cond.h"
 
+#ifdef FIBER_THREAD
+    #include "../libfiber/fiber_manager.h"
+#endif
+
 static apr_status_t thread_cond_cleanup(void *data)
 {
     apr_thread_cond_t *cond = (apr_thread_cond_t *)data;
     apr_status_t rv;
 
+#ifdef FIBER_THREAD
+    rv = (fiber_cond_destroy(&cond->cond) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     rv = pthread_cond_destroy(&cond->cond);
-#ifdef HAVE_ZOS_PTHREADS
-    if (rv) {
-        rv = errno;
-    }
+    #ifdef HAVE_ZOS_PTHREADS
+        if (rv) {
+            rv = errno;
+        }
+    #endif
 #endif
     return rv;
 } 
@@ -45,12 +53,16 @@ APR_DECLARE(apr_status_t) apr_thread_cond_create(apr_thread_cond_t **cond,
 
     new_cond->pool = pool;
 
+#ifdef FIBER_THREAD
+    rv = (fiber_cond_init((fiber_cond_t*)&new_cond->cond) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     if ((rv = pthread_cond_init(&new_cond->cond, NULL))) {
-#ifdef HAVE_ZOS_PTHREADS
-        rv = errno;
+    #ifdef HAVE_ZOS_PTHREADS
+            rv = errno;
+    #endif
+            return rv;
+        }
 #endif
-        return rv;
-    }
 
     apr_pool_cleanup_register(new_cond->pool,
                               (void *)new_cond, thread_cond_cleanup,
@@ -65,11 +77,15 @@ APR_DECLARE(apr_status_t) apr_thread_cond_wait(apr_thread_cond_t *cond,
 {
     apr_status_t rv;
 
+#ifdef FIBER_THREAD
+    rv = (fiber_cond_wait(&cond->cond, &mutex->mutex) == FIBER_SUCCESS) ? APR_SUCCESS : APR_ENOLOCK;
+#else
     rv = pthread_cond_wait(&cond->cond, &mutex->mutex);
-#ifdef HAVE_ZOS_PTHREADS
-    if (rv) {
-        rv = errno;
-    }
+    #ifdef HAVE_ZOS_PTHREADS
+        if (rv) {
+            rv = errno;
+        }
+    #endif
 #endif
     return rv;
 }
